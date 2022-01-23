@@ -4,31 +4,10 @@
 import * as React from 'react'
 import { useLocalStorageState } from '../utils';
 
-function Board() {
-  // MANAGED state
-  const [squares, setSquares] = useLocalStorageState('squares', Array(9).fill(null));
-
-  // DERIVED state
-  const nextValue = calculateNextValue(squares);
-  const winner = calculateWinner(squares);
-  const status = calculateStatus(winner, squares, nextValue);
-
-  // This is the function your square click handler will call. `square` should
-  // be an index. So if they click the center square, this will be `4`.
-  function selectSquare(square) {
-    if (winner || squares[square]) return;
-    const squaresCopy = [...squares];
-    squaresCopy[square] = nextValue;
-    setSquares(squaresCopy);
-  }
-
-  function restart() {
-    setSquares(Array(9).fill(null));
-  }
-
+function Board({ squares, onClick }) {
   function renderSquare(i) {
     return (
-      <button className="square" onClick={() => selectSquare(i)}>
+      <button className="square" onClick={() => onClick(i)}>
         {squares[i]}
       </button>
     )
@@ -36,7 +15,6 @@ function Board() {
 
   return (
     <div>
-      <div className="status">{status}</div>
       <div className="board-row">
         {renderSquare(0)}
         {renderSquare(1)}
@@ -52,21 +30,88 @@ function Board() {
         {renderSquare(7)}
         {renderSquare(8)}
       </div>
-      <button className="restart" onClick={restart}>
-        restart
-      </button>
     </div>
   )
 }
 
+// Game > Board
+
+// 1) `squares` in Game should be [[], [], []] (i.e. array of arrays)
+// 2) `currentSquares` in Board should be [] (i.e. single array)
+// 3) `moves in Game should be [] (i.e. array of indices representing move #)
+// 4) `currentMove` in Game should be a single number representing index of current move
+//     Game will use this value to pick out relevant `currentSquares` before passing down to Board
+
 function Game() {
+  // MANAGED state
+  const [squares, setSquares] = useLocalStorageState('squares', [Array(9).fill(null)]);
+  const [currentMove, setCurrentMove] = useLocalStorageState('currentMove', 0);
+
+  // DERIVED state
+  const currentSquares = squares[currentMove];
+  const nextValue = calculateNextValue(currentSquares);
+  const winner = calculateWinner(currentSquares);
+  const status = calculateStatus(winner, currentSquares, nextValue);
+
+  const moves = squares.map((_, boardIndex) => {
+    let text = `Go to move #${boardIndex}`;
+    if (boardIndex === 0) { text = 'Go to game start' };
+    if (boardIndex === currentMove) { text += ' (current)' };
+
+    return (
+      <li>
+        <button
+          onClick={() => setCurrentMove(boardIndex)}
+          disabled={boardIndex === currentMove}
+        >
+          {text}
+        </button>
+      </li>
+    )
+  });
+
+  const selectSquare = (square) => {
+    if (winner || currentSquares[square]) return;
+
+    const currentSquaresCopy = [...currentSquares];
+    currentSquaresCopy[square] = nextValue;
+
+    let squaresCopy = [...squares];
+
+    if (currentMove === squares.length - 1) {
+      setCurrentMove(move => move + 1);
+    } else {
+      // If current move is not the latest move (i.e. user has stepped back in history),
+      // then blitz all future moves and start recording from this point onwards.
+      squaresCopy = squaresCopy.slice(0, currentMove + 1);
+      setCurrentMove(currentMove + 1);
+    }
+
+    squaresCopy.push(currentSquaresCopy);
+    setSquares(squaresCopy);
+  };
+
+  function restart() {
+    setSquares([Array(9).fill(null)]);
+    setCurrentMove(0);
+  }
+
+  console.log({ squares, currentMove });
+
   return (
     <div className="game">
-      <div className="game-board">
-        <Board />
-      </div>
+    <div className="game-board">
+      <Board onClick={selectSquare} squares={currentSquares} />
+      <button className="restart" onClick={restart}>
+        restart
+      </button>
     </div>
-  )
+    <div className="game-info">
+      <div>{status}</div>
+      <ol>{moves}</ol>
+    </div>
+  </div>
+  );
 }
 
 function calculateStatus(winner, squares, nextValue) {
