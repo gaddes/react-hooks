@@ -2,45 +2,12 @@
 // http://localhost:3000/isolated/exercise/04.js
 
 import * as React from 'react'
+import { useLocalStorageState } from '../utils';
 
-function Board() {
-  // 🐨 squares is the state for this component. Add useState for squares
-  const squares = Array(9).fill(null)
-
-  // 🐨 We'll need the following bits of derived state:
-  // - nextValue ('X' or 'O')
-  // - winner ('X', 'O', or null)
-  // - status (`Winner: ${winner}`, `Scratch: Cat's game`, or `Next player: ${nextValue}`)
-  // 💰 I've written the calculations for you! So you can use my utilities
-  // below to create these variables
-
-  // This is the function your square click handler will call. `square` should
-  // be an index. So if they click the center square, this will be `4`.
-  function selectSquare(square) {
-    // 🐨 first, if there's already winner or there's already a value at the
-    // given square index (like someone clicked a square that's already been
-    // clicked), then return early so we don't make any state changes
-    //
-    // 🦉 It's typically a bad idea to mutate or directly change state in React.
-    // Doing so can lead to subtle bugs that can easily slip into production.
-    //
-    // 🐨 make a copy of the squares array
-    // 💰 `[...squares]` will do it!)
-    //
-    // 🐨 set the value of the square that was selected
-    // 💰 `squaresCopy[square] = nextValue`
-    //
-    // 🐨 set the squares to your copy
-  }
-
-  function restart() {
-    // 🐨 reset the squares
-    // 💰 `Array(9).fill(null)` will do it!
-  }
-
+function Board({ squares, onClick }) {
   function renderSquare(i) {
     return (
-      <button className="square" onClick={() => selectSquare(i)}>
+      <button className="square" onClick={() => onClick(i)}>
         {squares[i]}
       </button>
     )
@@ -48,8 +15,6 @@ function Board() {
 
   return (
     <div>
-      {/* 🐨 put the status in the div below */}
-      <div className="status">STATUS</div>
       <div className="board-row">
         {renderSquare(0)}
         {renderSquare(1)}
@@ -65,24 +30,90 @@ function Board() {
         {renderSquare(7)}
         {renderSquare(8)}
       </div>
+    </div>
+  )
+}
+
+// Game > Board
+
+// 1) `squares` in Game should be [[], [], []] (i.e. array of arrays)
+// 2) `currentSquares` in Board should be [] (i.e. single array)
+// 3) `moves in Game should be [] (i.e. array of indices representing move #)
+// 4) `currentMove` in Game should be a single number representing index of current move
+//     Game will use this value to pick out relevant `currentSquares` before passing down to Board
+
+function Game() {
+  // MANAGED state
+  const [squares, setSquares] = useLocalStorageState('squares', [Array(9).fill(null)]);
+  const [currentMove, setCurrentMove] = useLocalStorageState('currentMove', 0);
+
+  // DERIVED state
+  const currentSquares = squares[currentMove];
+  const nextValue = calculateNextValue(currentSquares);
+  const winner = calculateWinner(currentSquares);
+  const status = calculateStatus(winner, currentSquares, nextValue);
+
+  const moves = squares.map((_, boardIndex) => {
+    let text = `Go to move #${boardIndex}`;
+    if (boardIndex === 0) { text = 'Go to game start' };
+    if (boardIndex === currentMove) { text += ' (current)' };
+
+    return (
+      <li>
+        <button
+          onClick={() => setCurrentMove(boardIndex)}
+          disabled={boardIndex === currentMove}
+        >
+          {text}
+        </button>
+      </li>
+    )
+  });
+
+  const selectSquare = (square) => {
+    if (winner || currentSquares[square]) return;
+
+    const currentSquaresCopy = [...currentSquares];
+    currentSquaresCopy[square] = nextValue;
+
+    let squaresCopy = [...squares];
+
+    if (currentMove === squares.length - 1) {
+      setCurrentMove(move => move + 1);
+    } else {
+      // If current move is not the latest move (i.e. user has stepped back in history),
+      // then blitz all future moves and start recording from this point onwards.
+      squaresCopy = squaresCopy.slice(0, currentMove + 1);
+      setCurrentMove(currentMove + 1);
+    }
+
+    squaresCopy.push(currentSquaresCopy);
+    setSquares(squaresCopy);
+  };
+
+  function restart() {
+    setSquares([Array(9).fill(null)]);
+    setCurrentMove(0);
+  }
+
+  console.log({ squares, currentMove });
+
+  return (
+    <div className="game">
+    <div className="game-board">
+      <Board onClick={selectSquare} squares={currentSquares} />
       <button className="restart" onClick={restart}>
         restart
       </button>
     </div>
-  )
-}
-
-function Game() {
-  return (
-    <div className="game">
-      <div className="game-board">
-        <Board />
-      </div>
+    <div className="game-info">
+      <div>{status}</div>
+      <ol>{moves}</ol>
     </div>
-  )
+  </div>
+  );
 }
 
-// eslint-disable-next-line no-unused-vars
 function calculateStatus(winner, squares, nextValue) {
   return winner
     ? `Winner: ${winner}`
@@ -91,12 +122,10 @@ function calculateStatus(winner, squares, nextValue) {
     : `Next player: ${nextValue}`
 }
 
-// eslint-disable-next-line no-unused-vars
 function calculateNextValue(squares) {
   return squares.filter(Boolean).length % 2 === 0 ? 'X' : 'O'
 }
 
-// eslint-disable-next-line no-unused-vars
 function calculateWinner(squares) {
   const lines = [
     [0, 1, 2],
